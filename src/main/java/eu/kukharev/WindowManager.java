@@ -1,7 +1,6 @@
 package eu.kukharev;
 
 import javafx.scene.Scene;
-import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 
 public class WindowManager {
@@ -14,8 +13,8 @@ public class WindowManager {
         Scene menuScene = menuManager.createMenu();
         stage.setTitle("Game Application");
         stage.setScene(menuScene);
-        stage.setWidth(804);
-        stage.setHeight(804);
+        stage.setWidth(1000);
+        stage.setHeight(1000);
         stage.setResizable(false);
         stage.show();
     }
