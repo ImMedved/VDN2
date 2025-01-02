@@ -19,31 +19,30 @@ public class MenuManager {
     public Scene createMenu() {
         StackPane root = new StackPane();
 
-        // Задний фон
+        // Фон
         Image background = new Image(Objects.requireNonNull(getClass().getResourceAsStream("/BG1.png")));
         ImageView backgroundView = new ImageView(background);
         backgroundView.setFitWidth(1000);
         backgroundView.setFitHeight(1000);
 
-        // Кнопки
-        VBox buttons = new VBox(-50);
-        buttons.setTranslateY(250);
-        buttons.setTranslateX(300);
+        VBox menuOptions = new VBox(20);
+        menuOptions.setTranslateY(250);
+        menuOptions.setTranslateX(300);
 
-        Button startGameButton = createImageButton("/SG.png");
-        Button rulesButton = createImageButton("/RULES.png");
+        Button newGameButton = createImageButton("/SG.png");  // "New Game"
+        Button rulesButton  = createImageButton("/RULES.png");
 
-        startGameButton.setScaleX(0.6);
-        startGameButton.setScaleY(0.6);
-
+        newGameButton.setScaleX(0.6);
+        newGameButton.setScaleY(0.6);
         rulesButton.setScaleX(0.6);
         rulesButton.setScaleY(0.6);
 
-        startGameButton.setOnAction(event -> startGame());
+        // Переходим на экран настроек новой игры
+        newGameButton.setOnAction(event -> goToNewGameSetup());
         rulesButton.setOnAction(event -> showRules(root));
 
-        buttons.getChildren().addAll(startGameButton, rulesButton);
-        root.getChildren().addAll(backgroundView, buttons);
+        menuOptions.getChildren().addAll(newGameButton, rulesButton);
+        root.getChildren().addAll(backgroundView, menuOptions);
 
         return new Scene(root, 1000, 1000);
     }
@@ -53,13 +52,8 @@ public class MenuManager {
         ImageView imageView = new ImageView(image);
         Button button = new Button();
         button.setGraphic(imageView);
-        button.setStyle("-fx-background-color: transparent;"); // Прозрачный фон кнопки
+        button.setStyle("-fx-background-color: transparent;");
         return button;
-    }
-
-    private void startGame() {
-        GameFieldManager gameFieldManager = new GameFieldManager();
-        windowManager.setScene(gameFieldManager.createGameScene());
     }
 
     private void showRules(StackPane root) {
@@ -71,5 +65,11 @@ public class MenuManager {
         root.getChildren().clear();
         root.getChildren().add(backgroundView);
         root.setOnMouseClicked(event -> windowManager.initialize(windowManager.stage));
+    }
+
+    private void goToNewGameSetup() {
+        NewGameSetupManager setupManager = new NewGameSetupManager(windowManager);
+        Scene setupScene = setupManager.createSetupScene();
+        windowManager.setScene(setupScene);
     }
 }

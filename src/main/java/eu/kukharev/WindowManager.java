@@ -5,6 +5,7 @@ import javafx.stage.Stage;
 
 public class WindowManager {
     public Stage stage;
+    private Scene currentGameScene;
 
     public void initialize(Stage primaryStage) {
         this.stage = primaryStage;
@@ -17,6 +18,14 @@ public class WindowManager {
         stage.setHeight(1000);
         stage.setResizable(false);
         stage.show();
+    }
+
+    public void saveGameScene(Scene scene) {
+        this.currentGameScene = scene;
+    }
+
+    public Scene getCurrentGameScene() {
+        return currentGameScene;
     }
 
     public void setScene(Scene scene) {
