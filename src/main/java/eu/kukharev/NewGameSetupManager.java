@@ -2,23 +2,18 @@ package eu.kukharev;
 
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.control.ComboBox;
-import javafx.scene.control.RadioButton;
-import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 import javafx.scene.text.Text;
-
 import java.util.Objects;
+import java.util.Random;
 
 public class NewGameSetupManager {
     private final WindowManager windowManager;
     private int selectedFieldSize = 5;
-
-    // Ручная расстановка или случайная
-    private boolean manualPlacement = true;
+    private boolean manualPlacement = true; // ручная расстановка по умолчанию
 
     public NewGameSetupManager(WindowManager windowManager) {
         this.windowManager = windowManager;
@@ -44,40 +39,55 @@ public class NewGameSetupManager {
         HBox fieldSizeBox = new HBox(10);
         Text sizeLabel = new Text("Размер поля:");
         sizeLabel.setStyle("-fx-font-size: 18; -fx-fill: white;");
+
         ComboBox<Integer> sizeSelector = new ComboBox<>();
         sizeSelector.getItems().addAll(3, 4, 5, 6, 7, 8, 9, 10);
         sizeSelector.setValue(selectedFieldSize);
         sizeSelector.setOnAction(event -> selectedFieldSize = sizeSelector.getValue());
+
         fieldSizeBox.getChildren().addAll(sizeLabel, sizeSelector);
 
-        // Радиокнопки "Ручная расстановка / Случайная"
+        // Радиокнопки: ручная / случайная расстановка
         ToggleGroup placementGroup = new ToggleGroup();
-        RadioButton manualButton = new RadioButton("Ручная расстановка");
+        RadioButton manualButton = new RadioButton("Ручная расстановка (поле задаётся выбором ниже)");
         manualButton.setToggleGroup(placementGroup);
         manualButton.setSelected(true);
-        RadioButton randomButton = new RadioButton("Случайная расстановка");
+
+        RadioButton randomButton = new RadioButton("Случайная расстановка (поле и старт/конец случайны)");
         randomButton.setToggleGroup(placementGroup);
 
-        manualButton.setOnAction(e -> manualPlacement = true);
-        randomButton.setOnAction(e -> manualPlacement = false);
-
-        HBox placementBox = new HBox(20, manualButton, randomButton);
-        placementBox.setTranslateY(10);
+        manualButton.setOnAction(e -> {
+            manualPlacement = true;
+        });
+        randomButton.setOnAction(e -> {
+            manualPlacement = false;
+        });
 
         // Кнопка старта
         Button startButton = new Button("Start Game");
         startButton.setStyle("-fx-font-size: 16;");
         startButton.setOnAction(e -> startGame());
 
-        menuBox.getChildren().addAll(label, fieldSizeBox, placementBox, startButton);
+        menuBox.getChildren().addAll(label, fieldSizeBox, manualButton, randomButton, startButton);
 
         root.getChildren().addAll(backgroundView, menuBox);
         return new Scene(root, 1000, 1000);
     }
 
     private void startGame() {
-        // Передаем выбранные настройки в GameFieldManager
-        GameFieldManager gameFieldManager = new GameFieldManager(windowManager, selectedFieldSize, manualPlacement);
+        // Если выбран режим "случайная расстановка",
+        // игнорируем выбранный ComboBox размер и
+        // берём случайное значение в диапазоне [3..10]
+        if (!manualPlacement) {
+            Random rnd = new Random();
+            selectedFieldSize = rnd.nextInt(8) + 3; // 3..10
+        }
+
+        GameFieldManager gameFieldManager = new GameFieldManager(
+                windowManager,
+                selectedFieldSize,
+                manualPlacement
+        );
         windowManager.setScene(gameFieldManager.createGameScene());
     }
 }

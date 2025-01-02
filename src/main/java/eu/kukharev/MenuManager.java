@@ -29,7 +29,7 @@ public class MenuManager {
         menuOptions.setTranslateY(250);
         menuOptions.setTranslateX(300);
 
-        Button newGameButton = createImageButton("/SG.png");  // "New Game"
+        Button newGameButton = createImageButton("/SG.png");
         Button rulesButton  = createImageButton("/RULES.png");
 
         newGameButton.setScaleX(0.6);
@@ -37,7 +37,6 @@ public class MenuManager {
         rulesButton.setScaleX(0.6);
         rulesButton.setScaleY(0.6);
 
-        // Переходим на экран настроек новой игры
         newGameButton.setOnAction(event -> goToNewGameSetup());
         rulesButton.setOnAction(event -> showRules(root));
 
@@ -57,6 +56,7 @@ public class MenuManager {
     }
 
     private void showRules(StackPane root) {
+        // Можно переиспользовать BG1 или BG2 по желанию
         Image background = new Image(Objects.requireNonNull(getClass().getResourceAsStream("/BG2.png")));
         ImageView backgroundView = new ImageView(background);
         backgroundView.setFitWidth(1000);
@@ -64,6 +64,7 @@ public class MenuManager {
 
         root.getChildren().clear();
         root.getChildren().add(backgroundView);
+        // Возврат в меню по клику
         root.setOnMouseClicked(event -> windowManager.initialize(windowManager.stage));
     }
 
