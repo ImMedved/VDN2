@@ -1,0 +1,1 @@
+--module-path "C:\Users\Alexander\.m2\repository\org\openjfx\javafx-controls\21.0.5;C:\Users\Alexander\.m2\repository\org\openjfx\javafx-graphics\21.0.5;C:\Users\Alexander\.m2\repository\org\openjfx\javafx-base\21.0.5;C:\Users\Alexander\.m2\repository\org\openjfx\javafx-fxml\21.0.5" --add-modules javafx.controls,javafx.fxml
