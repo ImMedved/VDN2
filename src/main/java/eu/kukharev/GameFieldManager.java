@@ -20,6 +20,9 @@ import javafx.util.Duration;
 
 import java.util.*;
 
+/**
+ * Класс, управляющий игровым полем и логикой игры.
+ */
 public class GameFieldManager {
     private final WindowManager windowManager;
     private int fieldSize;
@@ -31,8 +34,9 @@ public class GameFieldManager {
     private int[][] field;
     private boolean[][] visited;
     private Image tiles;
-    private int playerX, playerY; // Координаты старта
-    private int endX, endY;       // Координаты финиша
+    private int playerX, playerY;   // Текущее положение игрока
+    private int startX, startY;     // Изначальная точка старта (не меняется)
+    private int endX, endY;         // Координаты финиша
     private int tileSize;
     private GridPane grid;
     private final StackPane root = new StackPane();
@@ -53,24 +57,69 @@ public class GameFieldManager {
     private VBox statsBox;
     private ImageView movesView, sumView, scoreView, timerView;
     private Timeline timeline; // Для обновления таймера и статистики
-    private List<int[]> bestPath = new ArrayList<>(); // список (x,y)
+    private double bestScore = Double.MAX_VALUE;
 
-    public GameFieldManager(WindowManager windowManager, GameState state) {
+    // Список координат лучшего пути
+    private List<int[]> bestPath = new ArrayList<>();
+
+    // Флаг, чтобы при показе лучшего пути убрать клики по клеткам
+    private boolean bestPathMode = false;
+
+    // Сохраним ссылки на элементы "финального" экрана (WIN/LOSE),
+    // чтобы можно было вернуться из режима показа пути
+    private List<Node> endScreenNodesBackup = new ArrayList<>();
+
+    /**
+     * Конструктор для нового поля (с опцией ручной или автоматической расстановки).
+     */
+    public GameFieldManager(WindowManager windowManager, int fieldSize, boolean manualPlacement) {
         this.windowManager = windowManager;
-        this.fieldSize = state.fieldSize;
-        this.manualPlacement = false; // при загрузке уже не вручную
-        this.field = state.field;
-        this.visited = state.visited;
-        this.playerX = state.playerX;
-        this.playerY = state.playerY;
-        this.endX = state.endX;
-        this.endY = state.endY;
-        this.moves = state.moves;
-        this.visitedValues.addAll(state.visitedValues);
+        this.fieldSize = fieldSize;
+        this.manualPlacement = manualPlacement;
+
+        this.field = new int[fieldSize][fieldSize];
+        this.visited = new boolean[fieldSize][fieldSize];
+        this.startTime = System.currentTimeMillis();
+
+        // Новые поля для запоминания исходной точки старта
+        this.startX = -1;
+        this.startY = -1;
+    }
+
+    /**
+     * Конструктор для **загрузки** готового состояния из GameState.
+     */
+    public GameFieldManager(WindowManager windowManager, GameState loadedState) {
+        this.windowManager = windowManager;
+        this.fieldSize = loadedState.fieldSize;
+        this.field     = loadedState.field;
+        this.visited   = loadedState.visited;
+        this.playerX   = loadedState.playerX;
+        this.playerY   = loadedState.playerY;
+        this.endX      = loadedState.endX;
+        this.endY      = loadedState.endY;
+        this.moves     = loadedState.moves;
+        this.visitedValues.addAll(loadedState.visitedValues);
+
+        // Поскольку поле уже готовое, ставим manualPlacement = false
+        this.manualPlacement = false;
+
+        // Проверяем, действительно ли в поле -1 (старт) и -2 (финиш)
+        if (isValidCoord(playerX, playerY) && field[playerX][playerY] == -1) {
+            startPlaced = true;
+            // Запомним исходный старт
+            this.startX = playerX;
+            this.startY = playerY;
+        }
+        if (isValidCoord(endX, endY) && field[endX][endY] == -2) {
+            endPlaced = true;
+        }
         this.startTime = System.currentTimeMillis();
     }
 
-
+    /**
+     * Создаёт игровую сцену (поле и панель статистики).
+     */
     public Scene createGameScene() {
         // Фон
         Image background = new Image(Objects.requireNonNull(getClass().getResourceAsStream("/BG1.png")));
@@ -78,88 +127,52 @@ public class GameFieldManager {
         backgroundView.setFitWidth(WINDOW_SIZE);
         backgroundView.setFitHeight(WINDOW_SIZE);
 
-
-        // Сетка
         grid = new GridPane();
         grid.setPadding(new Insets(350, 100, 300, 350));
         grid.setHgap(CELL_SPACING);
         grid.setVgap(CELL_SPACING);
 
-        // Загрузка тайлов
         tiles = new Image(Objects.requireNonNull(getClass().getResourceAsStream("/tiles.png")));
 
-        // Инициализация массива
-        field = new int[fieldSize][fieldSize];
-        visited = new boolean[fieldSize][fieldSize];
-
         calculateTileSize();
-
-        // Если расстановка случайная, генерируем старт/конец и поле
+        // Если расстановка случайная, можно сразу создать старт, финиш, заполнить поле
         if (!manualPlacement) {
             generateRandomStartEnd();
             generateRandomField();
-            // Чтобы можно было ходить, нужно считать,
-            // что старт и конец уже "выставлены" (флаги)
             startPlaced = true;
             endPlaced   = true;
         }
 
-        // Создаём панель статистики (moves, sum, score, timer)
         createStatsPanel();
 
-        // Размещаем сетку + панель статистики в общем контейнере
         VBox container = new VBox(10, grid, statsBox);
         container.setAlignment(Pos.TOP_CENTER);
 
-        // Инициальное обновление, чтобы отобразить нули
+        updateGrid();
         updateStatsPanel();
-        // Создаём ячейки
-
-        for (int i = 0; i < fieldSize; i++) {
-            for (int j = 0; j < fieldSize; j++) {
-                StackPane cell = createCell(i, j);
-                grid.add(cell, j, i);
-            }
-        }
 
         root.getChildren().addAll(backgroundView, container, grid);
 
-        // Запускаем таймер, который каждую секунду обновляет статистику
+        // Запуск обновления статистики раз в 1 секунду
         timeline = new Timeline(new KeyFrame(Duration.seconds(1), e -> updateStatsPanel()));
         timeline.setCycleCount(Timeline.INDEFINITE);
         timeline.play();
 
-        // Допустим, если закрываем окно — сохраняем
+        // При закрытии окна — сохранение
+        Scene scene = new Scene(root, WINDOW_SIZE, WINDOW_SIZE);
         windowManager.stage.setOnCloseRequest(e -> {
-            e.consume(); // чтобы самим управлять
+            e.consume();
             saveGame();
-            // Можно закрыть приложение
             Platform.exit();
         });
 
-        Scene scene = new Scene(root, WINDOW_SIZE, WINDOW_SIZE);
         return scene;
-
     }
 
-    private void saveGame() {
-        GameState state = new GameState();
-        state.fieldSize = fieldSize;
-        state.playerX   = playerX;
-        state.playerY   = playerY;
-        state.endX      = endX;
-        state.endY      = endY;
-        state.moves     = moves;
-        state.field     = field;
-        state.visited   = visited;
-        state.visitedValues.addAll(visitedValues);
-
-        windowManager.saveGameState(state);
-    }
-
-    public Scene createGameSceneFromState(GameState state) {
-        // Почти как createGameScene(), только поле не генерируем заново,
-        // а используем уже загруженное.
+    /**
+     * Создаёт игровую сцену из загруженного состояния (loaded).
+     */
+    public Scene createGameSceneFromState(GameState loaded) {
         Image background = new Image(Objects.requireNonNull(getClass().getResourceAsStream("/BG1.png")));
         ImageView backgroundView = new ImageView(background);
         backgroundView.setFitWidth(WINDOW_SIZE);
@@ -170,26 +183,19 @@ public class GameFieldManager {
         grid.setHgap(CELL_SPACING);
         grid.setVgap(CELL_SPACING);
 
-        // tiles уже можно загрузить:
         tiles = new Image(Objects.requireNonNull(getClass().getResourceAsStream("/tiles.png")));
 
         calculateTileSize();
+
         createStatsPanel();
         VBox container = new VBox(10, grid, statsBox);
         container.setAlignment(Pos.TOP_CENTER);
+
+        updateGrid();
         updateStatsPanel();
 
-        for (int i = 0; i < fieldSize; i++) {
-            for (int j = 0; j < fieldSize; j++) {
-                StackPane cell = createCell(i, j);
-                grid.add(cell, j, i);
-            }
-        }
-
-        root.getChildren().clear();
         root.getChildren().addAll(backgroundView, container, grid);
 
-        // Запускаем обновление таймера/статистики
         timeline = new Timeline(new KeyFrame(Duration.seconds(1), e -> updateStatsPanel()));
         timeline.setCycleCount(Timeline.INDEFINITE);
         timeline.play();
@@ -203,78 +209,98 @@ public class GameFieldManager {
         return scene;
     }
 
+    // ------------------ ЛОГИКА СОХРАНЕНИЯ ------------------
+
+    private void saveGame() {
+        GameState state = new GameState();
+        state.fieldSize = fieldSize;
+        state.field     = field;
+        state.visited   = visited;
+        state.playerX   = playerX;
+        state.playerY   = playerY;
+        state.endX      = endX;
+        state.endY      = endY;
+        state.moves     = moves;
+        state.visitedValues.addAll(visitedValues);
+        windowManager.saveGameState(state);
+    }
+
+    // ------------------ ОБЩИЕ МЕТОДЫ ------------------
+
+    private boolean isValidCoord(int x, int y) {
+        return x >= 0 && x < fieldSize && y >= 0 && y < fieldSize;
+    }
+
+    /**
+     * Создание панели статистики (шаги, сумма, счёт, время).
+     */
     private void createStatsPanel() {
         statsBox = new VBox(20);
         statsBox.setAlignment(Pos.CENTER);
 
-        // Подписи (можно вывести в виде обычного текста)
         Label movesLabel = new Label("Steps:");
         Label sumLabel   = new Label("Sum:");
         Label scoreLabel = new Label("Score:");
         Label timeLabel  = new Label("Time:");
 
-        // Картинки-цифры
         movesView = new ImageView();
         sumView   = new ImageView();
         scoreView = new ImageView();
         timerView = new ImageView();
 
-        // Собираем каждый блок
         VBox movesBox = new VBox(5, movesLabel, movesView);
         VBox sumBox   = new VBox(5, sumLabel,   sumView);
         VBox scoreBox = new VBox(5, scoreLabel, scoreView);
         VBox timeBox  = new VBox(5, timeLabel,  timerView);
 
-        if (fieldSize<7){
+        // Ряд настроек для разных размеров поля
+        if (fieldSize < 7) {
             statsBox.setScaleX(0.5);
             statsBox.setScaleY(0.5);
             statsBox.setPadding(new Insets(220, 0, 0, 0));
-        }else if (fieldSize == 7){
-            statsBox.setScaleX(1);
-            statsBox.setScaleY(1);
+        } else if (fieldSize == 7) {
             statsBox.setPadding(new Insets(220, 0, 0, 260));
-        }else if (fieldSize == 8){
+        } else if (fieldSize == 8) {
             statsBox.setScaleX(1.1);
             statsBox.setScaleY(1.1);
             statsBox.setPadding(new Insets(220, 0, 0, 280));
-        }else if (fieldSize == 9){
+        } else if (fieldSize == 9) {
             statsBox.setScaleX(1.2);
             statsBox.setScaleY(1.2);
             statsBox.setPadding(new Insets(220, 0, 0, 290));
-        }else if (fieldSize == 10){
+        } else if (fieldSize == 10) {
             statsBox.setScaleX(1.3);
             statsBox.setScaleY(1.3);
             statsBox.setPadding(new Insets(220, 0, 0, 310));
         }
 
-
         statsBox.getChildren().addAll(movesBox, sumBox, scoreBox, timeBox);
 
-        // Стили для наглядности (необязательно)
         movesLabel.setStyle("-fx-text-fill: white; -fx-font-size: 16;");
         sumLabel.setStyle("-fx-text-fill: black; -fx-font-size: 16;");
         scoreLabel.setStyle("-fx-text-fill: black; -fx-font-size: 16;");
         timeLabel.setStyle("-fx-text-fill: black; -fx-font-size: 16;");
     }
 
-    /** Обновление значений статистики (вызывается таймером и при каждом клике). */
+    /**
+     * Обновляет панель статистики.
+     */
     private void updateStatsPanel() {
         int sum = visitedValues.stream().mapToInt(Integer::intValue).sum();
         int steps = moves;
 
-        // Если ещё 0 ходов — счёт 0
         double sc = (steps == 0) ? 0 : (double) sum / steps;
-
         int elapsedSec = (int) ((System.currentTimeMillis() - startTime) / 1000);
 
-        // Переводим числа в «цифровые тайлы»
         movesView.setImage(createScoreImage(steps));
         sumView.setImage(createScoreImage(sum));
         scoreView.setImage(createScoreImage((int) Math.round(sc)));
         timerView.setImage(createScoreImage(elapsedSec));
     }
 
-    /** Формируем картинку из цифровых тайлов для заданного числа. */
+    /**
+     * Формируем картинку из цифровых тайлов для заданного числа.
+     */
     private Image createScoreImage(int value) {
         HBox digitsBox = new HBox(5);
         digitsBox.setStyle("-fx-background-color: transparent;");
@@ -295,12 +321,15 @@ public class GameFieldManager {
         return digitsBox.snapshot(params, null);
     }
 
-    // Генерация случайных старт/конец
     private void generateRandomStartEnd() {
         Random random = new Random();
         playerX = random.nextInt(fieldSize);
         playerY = random.nextInt(fieldSize);
         field[playerX][playerY] = -1; // Start
+
+        // Запомним стартовые координаты
+        this.startX = playerX;
+        this.startY = playerY;
 
         do {
             endX = random.nextInt(fieldSize);
@@ -310,7 +339,6 @@ public class GameFieldManager {
         field[endX][endY] = -2; // End
     }
 
-    // Генерация случайных значений (кроме старт/конца)
     private void generateRandomField() {
         Random random = new Random();
         for (int i = 0; i < fieldSize; i++) {
@@ -322,41 +350,43 @@ public class GameFieldManager {
         }
     }
 
-    // Проверка валидности финиша
     private boolean isValidEndPosition(int sx, int sy, int ex, int ey) {
         if (sx == ex && sy == ey) return true;
         int dx = Math.abs(sx - ex);
         int dy = Math.abs(sy - ey);
-        // Нельзя ставить конец прямо рядом (dx=0/dy=0) — условие из старого кода
         return (dx < 2 && dy < 2 && (dx != 1 || dy != 1));
     }
 
     private void calculateTileSize() {
-        int maxDim = fieldSize;
-        tileSize = Math.min((WINDOW_SIZE - 600) / maxDim, ORIGINAL_TILE_SIZE);
+        tileSize = Math.min((WINDOW_SIZE - 600) / fieldSize, ORIGINAL_TILE_SIZE);
     }
 
     private StackPane createCell(int x, int y) {
         StackPane cell = new StackPane();
         ImageView imageView = new ImageView(tiles);
-
         imageView.setViewport(getFieldViewport(field[x][y]));
         imageView.setFitWidth(tileSize);
         imageView.setFitHeight(tileSize);
 
         cell.getChildren().add(imageView);
-        cell.setOnMouseClicked(event -> handleCellClick(event, x, y));
+
+        // Если мы в режиме показа лучшего пути — отключаем клики
+        if (!bestPathMode) {
+            cell.setOnMouseClicked(event -> handleCellClick(event, x, y));
+        }
         return cell;
     }
 
-    // Возвращаем нужный кусок тайлсета для клетки поля
+    /**
+     * Возвращает нужный фрагмент тайлсета для клетки поля (старта, финиша, цифры и т.д.).
+     */
     private Rectangle2D getFieldViewport(int value) {
         // value: 1..9 => индексы 0..8
         // -1 => 9 (start), -2 => 11 (end), 0 => 10 (пустая)
         int index = switch (value) {
-            case -1 -> 9; // Start
-            case -2 -> 11; // End
-            case 0 -> 10; // Пустая
+            case -1 -> 9;   // Start
+            case -2 -> 11;  // End
+            case 0  -> 10;  // Пустая
             default -> value - 1;
         };
         double x = index * ORIGINAL_TILE_SIZE;
@@ -364,24 +394,28 @@ public class GameFieldManager {
     }
 
     /**
-     * Возвращаем нужный кусок тайлсета для отображения "цифры" в очках и таймере.
-     * В нашем спрайте цифра '1' соответствует индексу 0, '2'—1, ..., '9'—8.
-     * Если придёт 0, то подставим что-нибудь или пропустим (если нужно).
+     * Возвращает нужный фрагмент тайлсета для отображения цифры (0..9).
      */
     private Rectangle2D getDigitViewport(int digit) {
-        // digit=1 => index=0, digit=2 => index=1, ..., digit=9 => 8, digit=0 => 9, можно скорректировать
-        // Ниже вариант: 1=0, 2=1, ..., 9=8, 0=9 (или по-другому).
         int index = (digit == 0) ? 9 : (digit - 1);
         double x = index * ORIGINAL_TILE_SIZE;
         return new Rectangle2D(x, 0, ORIGINAL_TILE_SIZE, ORIGINAL_TILE_SIZE);
     }
 
+    /**
+     * Обработка клика по клетке (передвижение игрока, если можно).
+     */
     private void handleCellClick(MouseEvent event, int x, int y) {
-        // Если ручная расстановка: сначала ставим старт, потом конец
+        if (bestPathMode) return; // если режим лучшего пути — не даём ходить
+
+        // Ручная расстановка
         if (manualPlacement && !startPlaced) {
             field[x][y] = -1;
             playerX = x;
             playerY = y;
+            startX = x;  // Запомним реальную точку старта
+            startY = y;
+
             startPlaced = true;
             updateGrid();
             updateStatsPanel();
@@ -400,7 +434,7 @@ public class GameFieldManager {
             return;
         }
 
-        // Основная логика передвижения (только если и старт, и конец уже на поле)
+        // Основная логика ходьбы (если старт и финиш уже есть)
         if (startPlaced && endPlaced) {
             if (isNeighbor(x, y) && !visited[x][y]) {
                 visited[playerX][playerY] = true;
@@ -408,16 +442,17 @@ public class GameFieldManager {
                 moves++;
 
                 if (field[x][y] == -2) {
-                    // Перед тем как выйти, обновим панель (движение +1)
+                    // пришли на финиш
                     updateStatsPanel();
                     endGame();
                     return;
                 }
 
-                field[playerX][playerY] = 0;
+                // Сдвигаем "игрока" на новую позицию
+                field[playerX][playerY] = 0; // то место, где был игрок, обнуляем
                 playerX = x;
                 playerY = y;
-                field[playerX][playerY] = -1;
+                field[playerX][playerY] = -1; // ставим -1 в новой позиции
 
                 updateGrid();
                 updateStatsPanel();
@@ -430,6 +465,9 @@ public class GameFieldManager {
                 || (Math.abs(playerY - y) == 1 && playerX == x);
     }
 
+    /**
+     * Перерисовка грида (grid) в соответствии с текущим состоянием field[][].
+     */
     private void updateGrid() {
         grid.getChildren().clear();
         for (int i = 0; i < fieldSize; i++) {
@@ -440,134 +478,183 @@ public class GameFieldManager {
         }
     }
 
-    // Вызываем в endGame():
+    /**
+     * Завершение игры: останавливаем таймер, считаем счёт игрока,
+     * вызываем поиск лучшего пути (recursion) и переходим на экран итога.
+     */
     private void endGame() {
         if (timeline != null) timeline.stop();
+
         int sum = visitedValues.stream().mapToInt(Integer::intValue).sum();
         double finalScore = (moves == 0) ? 0 : (double) sum / moves;
 
-        double bestScore = computeBestScoreAndPath(); // теперь сохраняется bestPath
+        // Считаем лучший счёт и лучшую последовательность (bestPath).
+        // При этом bestScore обнуляем, чтобы пересчитать заново.
+        this.bestScore = Double.MAX_VALUE;
+        double bestScoreFound = computeBestScoreAndPath();
 
         long endTime = System.currentTimeMillis();
         int totalTimeSec = (int)((endTime - startTime) / 1000);
 
-        showEndScreen(finalScore, bestScore, totalTimeSec);
+        visitedValues.clear();
+
+        this.playerX = startX;
+        this.playerY = startY;
+
+        showEndScreen(finalScore, bestScoreFound, totalTimeSec);
     }
 
-    /**
-     * Находим путь с минимальной суммой клеток (D’эйкстра).
-     * Итоговый счёт — (сумма) / (шаги).
-     */
-    private double computeBestScoreAndPath() {
-        // Почти то же, что computeBestScore(), но сохраним путь.
-        // Для этого заведём массив предков (parent) и восстановим путь при выходе из цикла.
-        // ...
-        int[][] bestCost = new int[fieldSize][fieldSize];
-        int[][] bestSteps = new int[fieldSize][fieldSize];
-        int[][] parentX = new int[fieldSize][fieldSize];
-        int[][] parentY = new int[fieldSize][fieldSize];
+    // ------------------ РЕКУРСИВНЫЙ ПОИСК ЛУЧШЕГО ПУТИ ------------------
 
-        for (int i = 0; i < fieldSize; i++) {
-            Arrays.fill(bestCost[i], Integer.MAX_VALUE);
-            Arrays.fill(bestSteps[i], Integer.MAX_VALUE);
-            Arrays.fill(parentX[i], -1);
-            Arrays.fill(parentY[i], -1);
+    /**
+     * Рекурсивно ищем все пути. С учётом оптимизаций.
+     *
+     * @param costSoFar     набранная сумма очков
+     * @param stepsSoFar    количество сделанных шагов (стартовые считаем за 1)
+     * @param path          текущий маршрут (список координат)
+     * @param visitedLocal  локальный массив посещённых ячеек
+     * @param bestPathFound "выходной" список для хранения лучшего пути
+     */
+    private void backtrack(
+            int x,
+            int y,
+            int costSoFar,
+            int stepsSoFar,
+            List<int[]> path,
+            boolean[][] visitedLocal,
+            List<int[]> bestPathFound
+    ) {
+        // 1. Проверка границ
+        if (x < 0 || x >= fieldSize || y < 0 || y >= fieldSize) {
+            return;
+        }
+        // 2. Если уже посещали — выходим
+        if (visitedLocal[x][y]) {
+            return;
         }
 
-        bestCost[playerX][playerY] = Math.max(field[playerX][playerY], 0);
-        bestSteps[playerX][playerY] = 1;
+        visitedLocal[x][y] = true;
+        path.add(new int[]{x, y});
 
-        PriorityQueue<PathNode> pq = new PriorityQueue<>(Comparator.comparingInt(a -> a.cost));
-        pq.offer(new PathNode(playerX, playerY, bestCost[playerX][playerY], 1));
+        // 3. Если дошли до финиша — обновляем лучший результат
+        if (x == endX && y == endY) {
+            double score = (stepsSoFar == 0)
+                    ? 0.0
+                    : (double) costSoFar / (double) stepsSoFar;
 
+            // Если нашли улучшение — запишем
+            if (score < this.bestScore && score != 0) {
+                this.bestScore = score;
+                bestPathFound.clear();
+                bestPathFound.addAll(path);
+                System.out.println(score);
+            }
+
+            // Откат
+            visitedLocal[x][y] = false;
+            path.remove(path.size() - 1);
+            return;
+        }
+
+        // 4. «Простая» оценка, можно ли улучшить ratio.
+        //    Допустим, максимум клеток = fieldSize * fieldSize.
+        //    Тогда оставшиеся клетки (или шаги) максимум = (fieldSize * fieldSize) - stepsSoFar.
+        //    Даже если все они будут "бесплатными" (cost=0), то полученный ratio будет:
+        //         costSoFar / (stepsSoFar + оставшиеся)
+        //    Если это всё равно >= bestScore, то нет смысла углубляться дальше.
+        int maxStepsLeft = fieldSize * fieldSize - stepsSoFar;
+        double bestPossibleRatio = (stepsSoFar + maxStepsLeft > 0)
+                ? ((double) costSoFar / (stepsSoFar + maxStepsLeft))
+                : Double.MAX_VALUE;
+
+        if (bestPossibleRatio >= this.bestScore) {
+            // Прекращаем — в лучшем случае не станем лучше.
+            visitedLocal[x][y] = false;
+            path.remove(path.size() - 1);
+            return;
+        }
+
+        // 5. Значение текущей клетки (для подсчёта costSoFar)
+        int currentVal = field[x][y];
+        if (currentVal < 0) currentVal = 0;  // старт/финиш не дают очков
+
+        // 6. Четыре направления
         int[] dx = {-1, 1, 0, 0};
         int[] dy = {0, 0, -1, 1};
 
-        boolean found = false;
-        while (!pq.isEmpty()) {
-            PathNode cur = pq.poll();
-            int cx = cur.x;
-            int cy = cur.y;
-            int costSoFar = cur.cost;
-            int stepsSoFar = cur.steps;
+        for (int i = 0; i < 4; i++) {
+            int nx = x + dx[i];
+            int ny = y + dy[i];
 
-            if (cx == endX && cy == endY) {
-                found = true;
-                break; // всё, финиш
+            // Посчитаем cost для следующего шага
+            int nextCost = costSoFar;
+            if (isValidCoord(nx, ny)) {
+                int val = (field[nx][ny] >= 1) ? field[nx][ny] : 0;
+                nextCost += val;
             }
-            if (costSoFar > bestCost[cx][cy]) continue;
 
-            for (int i = 0; i < 4; i++) {
-                int nx = cx + dx[i];
-                int ny = cy + dy[i];
-                if (nx < 0 || nx >= fieldSize || ny < 0 || ny >= fieldSize) continue;
-
-                int cellVal = field[nx][ny];
-                if (cellVal < 0) cellVal = 0;
-                int newCost  = costSoFar + cellVal;
-                int newSteps = stepsSoFar + 1;
-
-                if (newCost < bestCost[nx][ny] ||
-                        (newCost == bestCost[nx][ny] && newSteps < bestSteps[nx][ny])) {
-                    bestCost[nx][ny] = newCost;
-                    bestSteps[nx][ny] = newSteps;
-                    parentX[nx][ny] = cx;
-                    parentY[nx][ny] = cy;
-                    pq.offer(new PathNode(nx, ny, newCost, newSteps));
-                }
-            }
+            // Рекурсивный вызов
+            backtrack(nx, ny, nextCost, stepsSoFar + 1, path, visitedLocal, bestPathFound);
         }
 
-        if (!found) {
-            bestPath.clear();
-            return 9999.0;
-        }
-        // Восстановим путь (endX, endY) -> (playerX, playerY)
-        List<int[]> revPath = new ArrayList<>();
-        int px = endX, py = endY;
-        while (!(px == -1 && py == -1)) {
-            revPath.add(new int[]{px, py});
-            int tx = parentX[px][py];
-            int ty = parentY[px][py];
-            px = tx; py = ty;
-            if (px == playerX && py == playerY) {
-                revPath.add(new int[]{px, py});
-                break;
-            }
-        }
-        Collections.reverse(revPath);
-        bestPath = revPath;
-
-        int finalCost = bestCost[endX][endY];
-        int finalSteps = bestSteps[endX][endY];
-        return (double) finalCost / finalSteps;
-    }
-
-    // Узел для очереди
-    private static class PathNode  {
-        int x, y, cost, steps;
-        PathNode (int x, int y, int cost, int steps) {
-            this.x = x;
-            this.y = y;
-            this.cost = cost;
-            this.steps = steps;
-        }
+        // 7. Откат
+        visitedLocal[x][y] = false;
+        path.remove(path.size() - 1);
     }
 
     /**
-     * Отображение экрана завершения игры.
-     * Показываем наш счёт, лучший счёт, время и надпись WIN/LOSE + кнопки.
+     * Запуск рекурсивного перебора. Возвращает лучший счёт (минимальный) или 9999.0,
+     * если пути нет. Также заполняет bestPath (список координат оптимального пути).
+     */
+    private double computeBestScoreAndPath() {
+        System.out.println("Start computeBestScoreAndPath");
+        bestPath = new ArrayList<>();
+
+        // Лучшее значение храним в this.bestScore — туда же будем записывать результат
+        // при нахождении лучших путей.
+        this.bestScore = Double.MAX_VALUE;
+        List<int[]> bestPathFound = new ArrayList<>();
+
+        boolean[][] visitedLocal = new boolean[fieldSize][fieldSize];
+
+        // Стартуем из (startX, startY)
+        backtrack(
+                startX,
+                startY,
+                0,
+                1,
+                new ArrayList<>(),
+                visitedLocal,
+                bestPathFound
+        );
+
+        // Если так и не нашли путь
+        if (this.bestScore == Double.MAX_VALUE) {
+            bestPath.clear();
+            return 9999.0;
+        }
+
+        System.out.println("Best score is: " + bestScore);
+        bestPath = bestPathFound;
+        return this.bestScore;
+    }
+
+    // ----------------------------------------------------------------------
+
+    /**
+     * Показываем экран победы/поражения и счёты.
      */
     private void showEndScreen(double finalScore, double bestScore, int totalTimeSec) {
         Image background = new Image(Objects.requireNonNull(getClass().getResourceAsStream("/BG1.png")));
         ImageView backgroundView = new ImageView(background);
         backgroundView.setFitWidth(WINDOW_SIZE);
         backgroundView.setFitHeight(WINDOW_SIZE);
+        //Math.round(finalScore);
+        //Math.round(bestScore);
 
-        // Проверяем, выиграли ли мы (если наш счёт <= оптимального)
         boolean isWin = (Double.compare(finalScore, bestScore) <= 0);
+        System.out.println("Player score is: " + finalScore + ". Best score is: " + bestScore);
 
-        // Накладываем поверх WIN или LOSE
         ImageView resultView = new ImageView(new Image(
                 Objects.requireNonNull(
                         getClass().getResourceAsStream(isWin ? "/WIN.png" : "/LOST.png")
@@ -578,45 +665,67 @@ public class GameFieldManager {
         resultView.setTranslateY(0);
         resultView.setTranslateX(-150);
 
-        // Отображение счёта игрока
         ImageView playerScoreView = createScoreView((int) Math.round(finalScore));
-        playerScoreView.setTranslateY(0); // немного вниз
+        playerScoreView.setTranslateY(0);
 
-        // Отображение лучшего счёта
         ImageView bestScoreView = createScoreView((int) Math.round(bestScore));
         bestScoreView.setTranslateY(80);
 
-        // Отображение времени
         ImageView timeView = createScoreView(totalTimeSec);
         timeView.setTranslateY(180);
 
-        // Кнопки
         Button toMenuButton = createImageButton("/toMenu.png");
         toMenuButton.setOnAction(event -> goToMenu());
 
         Button betterWayButton = createImageButton("/bestWay.png");
+        // При нажатии показываем лучший путь
         betterWayButton.setOnAction(event -> {
-            // Нужно убрать статистику, оставить только поле.
-            // Можно спрятать statsBox и другие элементы, если хотим.
-            if (statsBox != null) statsBox.setVisible(false);
+            // Сохраняем текущие ноды экрана
+            endScreenNodesBackup.clear();
+            endScreenNodesBackup.addAll(root.getChildren());
 
-            // Запускаем мигание
+            // Чтобы нельзя было ходить по полю
+            bestPathMode = true;
+
+            // Очищаем root, показываем только фон, grid и кнопку «Return»
+            root.getChildren().clear();
+            root.getChildren().addAll(backgroundView, grid);
+
+            // Добавим кнопку «Return»
+            Button returnButton = new Button("Return");
+            returnButton.setTranslateX(380);
+            returnButton.setTranslateY(300);
+            returnButton.setStyle("-fx-font-size: 16;");
+            returnButton.setOnAction(e2 -> {
+                // Останавливаем мигание
+                if (blinkTimeline != null) {
+                    blinkTimeline.stop();
+                }
+                // Возвращаемся к экрану победы/проигрыша
+                bestPathMode = false;
+                root.getChildren().clear();
+                root.getChildren().addAll(endScreenNodesBackup);
+            });
+            root.getChildren().add(returnButton);
+
+            // Запускаем мигание лучшего пути
             highlightBestPathBlink();
         });
-
 
         VBox buttons = new VBox(20, toMenuButton, betterWayButton);
         buttons.setTranslateY(65);
         buttons.setTranslateX(320);
-
         buttons.setScaleX(0.5);
         buttons.setScaleY(0.5);
 
-        // Собираем все элементы
+        // Очищаем root и собираем заново
         root.getChildren().clear();
         root.getChildren().addAll(backgroundView, resultView, playerScoreView, bestScoreView, timeView, buttons);
     }
 
+    /**
+     * Создаёт кнопку на основе картинки.
+     */
     private Button createImageButton(String texturePath) {
         Image image = new Image(Objects.requireNonNull(getClass().getResourceAsStream(texturePath)));
         ImageView imageView = new ImageView(image);
@@ -627,19 +736,16 @@ public class GameFieldManager {
     }
 
     /**
-     * Создание изображения с набором цифр (для счёта, таймера).
-     * Использует getDigitViewport(digit) вместо getFieldViewport.
+     * Формирует ImageView с «цифровым» отображением числа scoreValue (для счёта/времени).
      */
     private ImageView createScoreView(int scoreValue) {
         HBox scoreTiles = new HBox(5);
         scoreTiles.setStyle("-fx-background-color: transparent;");
 
-        // Разбиваем число на цифры
         String str = String.valueOf(scoreValue);
-
         for (char c : str.toCharArray()) {
             int digit = Character.getNumericValue(c);
-            if (digit < 0 || digit > 9) continue; // защита
+            if (digit < 0 || digit > 9) continue;
 
             ImageView tileView = new ImageView(tiles);
             tileView.setViewport(getDigitViewport(digit));
@@ -650,55 +756,91 @@ public class GameFieldManager {
 
         SnapshotParameters params = new SnapshotParameters();
         params.setFill(Color.TRANSPARENT);
-
         return new ImageView(scoreTiles.snapshot(params, null));
     }
 
+    /**
+     * Переход в главное меню.
+     */
     private void goToMenu() {
         windowManager.initialize(windowManager.stage);
     }
 
     /**
-     * Подсветка потенциально лучшего пути (упрощённо).
-     * Можно адаптировать, чтобы реально отрисовывать маршрут D’эйкстры.
+     * Мигание пути:
+     * - Старт (startX,startY) отображаем как -1 (иконка игрока),
+     * - Финиш (endX,endY) как -2 (иконка финиша),
+     * - Промежуточные клетки пути мигают «цифра / обычная плитка».
      */
     private void highlightBestPathBlink() {
-        // Очищаем все стили
+        // Обновим поле (grid) — в нём уже отключены клики
         updateGrid();
 
         blinkTimeline = new Timeline(
                 new KeyFrame(Duration.seconds(0.0), e -> {
-                    // Показать цифры (то есть обычная отрисовка поля)
-                    updateGrid();
+                    // Показываем цифры на всех клетках пути, кроме старт/финиш
                     for (int[] coords : bestPath) {
                         int bx = coords[0];
                         int by = coords[1];
-                        // Можно выделить цветом границу или иконкой
-                        // Для упрощения тут зальём слегка
                         StackPane sp = getCellFromGrid(bx, by);
-                        sp.setStyle("-fx-border-color: yellow; -fx-border-width: 3;");
+
+                        if (bx == startX && by == startY) {
+                            // старт
+                            sp.setStyle("-fx-background-color: transparent;");
+                            setCellViewport(sp, -1);
+                        } else if (bx == endX && by == endY) {
+                            // финиш
+                            sp.setStyle("-fx-background-color: transparent;");
+                            setCellViewport(sp, -2);
+                        } else {
+                            //TODO: fix it
+
+                            // промежуточная клетка — показываем "цифру"
+                            sp.setStyle("-fx-background-color: transparent;");
+                            int val = field[bx][by];
+                            // Если в исходном поле у нас 0 (или -1/-2),
+                            // можно показать хотя бы 1, чтобы что-то мигало
+                            setCellViewport(sp, (val > 0) ? val : 1);
+                        }
                     }
                 }),
                 new KeyFrame(Duration.seconds(1.0), e -> {
-                    // Показать иконки/спрайты, например, "X" вместо цифр
-                    updateGrid();
+                    // Показываем «обычную плитку» для промежуточных
                     for (int[] coords : bestPath) {
                         int bx = coords[0];
                         int by = coords[1];
                         StackPane sp = getCellFromGrid(bx, by);
-                        sp.setStyle("-fx-background-color: rgba(255, 255, 0, 0.5);");
+
+                        if (bx == startX && by == startY) {
+                            setCellViewport(sp, -1);
+                        } else if (bx == endX && by == endY) {
+                            setCellViewport(sp, -2);
+                        } else {
+                            sp.setStyle("-fx-background-color: transparent;");
+                            // Показываем «текстуру» клетки
+                            int v = field[bx][by];
+                            if (v < 0) v = 0;
+                            setCellViewport(sp, v);
+                        }
                     }
                 })
         );
+
         blinkTimeline.setCycleCount(Timeline.INDEFINITE);
         blinkTimeline.setAutoReverse(true);
         blinkTimeline.play();
     }
 
+    /**
+     * Устанавливает в StackPane (ячейку) спрайт из tiles для заданного value.
+     */
+    private void setCellViewport(StackPane cell, int value) {
+        if (cell.getChildren().isEmpty()) return;
+        ImageView iv = (ImageView) cell.getChildren().get(0);
+        iv.setViewport(getFieldViewport(value));
+    }
+
     private StackPane getCellFromGrid(int x, int y) {
-        // grid.getChildren() содержит все StackPane по индексам.
-        // Можно получить node через grid.getChildren().get(...)
-        // Но лучше искать через row и column:
         for (Node node : grid.getChildren()) {
             if (GridPane.getRowIndex(node) == x && GridPane.getColumnIndex(node) == y) {
                 return (StackPane) node;

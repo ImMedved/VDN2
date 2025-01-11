@@ -12,4 +12,3 @@ public class GameState {
     public boolean[][] visited;
     public List<Integer> visitedValues = new ArrayList<>();
 }
-

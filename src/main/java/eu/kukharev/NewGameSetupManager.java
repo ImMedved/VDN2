@@ -10,19 +10,28 @@ import javafx.scene.text.Text;
 import java.util.Objects;
 import java.util.Random;
 
+/**
+ * Менеджер настроек новой игры.
+ */
 public class NewGameSetupManager {
     private final WindowManager windowManager;
     private int selectedFieldSize = 5;
-    private boolean manualPlacement = true; // ручная расстановка по умолчанию
+    private boolean manualPlacement = true; // по умолчанию — ручная расстановка
 
+    /**
+     * @param windowManager Менеджер окон
+     */
     public NewGameSetupManager(WindowManager windowManager) {
         this.windowManager = windowManager;
     }
 
+    /**
+     * Создаёт сцену настроек (выбор размера поля, ручная/случайная расстановка).
+     */
     public Scene createSetupScene() {
         StackPane root = new StackPane();
 
-        // Задний фон
+        // Фон
         Image background = new Image(Objects.requireNonNull(getClass().getResourceAsStream("/BG1.png")));
         ImageView backgroundView = new ImageView(background);
         backgroundView.setFitWidth(1000);
@@ -47,7 +56,7 @@ public class NewGameSetupManager {
 
         fieldSizeBox.getChildren().addAll(sizeLabel, sizeSelector);
 
-        // Радиокнопки: ручная / случайная расстановка
+        // Радиокнопки
         ToggleGroup placementGroup = new ToggleGroup();
         RadioButton manualButton = new RadioButton("Manual start/end");
         manualButton.setToggleGroup(placementGroup);
@@ -56,14 +65,9 @@ public class NewGameSetupManager {
         RadioButton randomButton = new RadioButton("Random start/end");
         randomButton.setToggleGroup(placementGroup);
 
-        manualButton.setOnAction(e -> {
-            manualPlacement = true;
-        });
-        randomButton.setOnAction(e -> {
-            manualPlacement = false;
-        });
+        manualButton.setOnAction(e -> manualPlacement = true);
+        randomButton.setOnAction(e -> manualPlacement = false);
 
-        // Кнопка старта
         Button startButton = new Button("Start Game");
         startButton.setStyle("-fx-font-size: 16;");
         startButton.setOnAction(e -> startGame());
@@ -75,12 +79,10 @@ public class NewGameSetupManager {
     }
 
     private void startGame() {
-        // Если выбран режим "случайная расстановка",
-        // игнорируем выбранный ComboBox размер и
-        // берём случайное значение в диапазоне [3..10]
+        // Если пользователь выбрал «случайную расстановку», выбираем случайный размер
         if (!manualPlacement) {
             Random rnd = new Random();
-            selectedFieldSize = rnd.nextInt(8) + 3; // 3..10
+            selectedFieldSize = rnd.nextInt(8) + 3; // [3..10]
         }
 
         GameFieldManager gameFieldManager = new GameFieldManager(

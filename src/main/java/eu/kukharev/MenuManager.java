@@ -3,25 +3,31 @@ package eu.kukharev;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
-import javafx.stage.Window;
 
 import java.util.Objects;
 
+/**
+ * Менеджер главного меню игры.
+ */
 public class MenuManager {
     private final WindowManager windowManager;
 
+    /**
+     * @param windowManager Менеджер окон
+     */
     public MenuManager(WindowManager windowManager) {
         this.windowManager = windowManager;
     }
 
+    /**
+     * Создаёт сцену главного меню с кнопками «New Game», «Rules», «Load», «Exit».
+     */
     public Scene createMenu() {
         StackPane root = new StackPane();
 
@@ -33,11 +39,11 @@ public class MenuManager {
 
         // Создание кнопок
         Button newGameButton = createImageButton("/SG.png");
-        Button rulesButton = createImageButton("/RULES.png");
-        Button exitButton = createImageButton("/EXIT.png");
-        Button loadButton = createImageButton("/LOAD.png");
+        Button rulesButton   = createImageButton("/RULES.png");
+        Button exitButton    = createImageButton("/EXIT.png");
+        Button loadButton    = createImageButton("/LOAD.png");
 
-        // Настройка масштабов кнопок
+        // Масштабирование кнопок
         newGameButton.setScaleX(0.5);
         newGameButton.setScaleY(0.5);
         rulesButton.setScaleX(0.5);
@@ -47,31 +53,30 @@ public class MenuManager {
         loadButton.setScaleX(0.25);
         loadButton.setScaleY(0.25);
 
-        // Добавление обработчиков событий
+        // Обработчики
         newGameButton.setOnAction(event -> goToNewGameSetup());
         rulesButton.setOnAction(event -> showRules(root));
         exitButton.setOnAction(event -> Platform.exit());
         loadButton.setOnAction(event -> loadSavedGame());
 
-        // Создание GridPane
+        // Сетка для кнопок
         GridPane gridPane = new GridPane();
-        gridPane.setAlignment(Pos.CENTER); // Центрирование всей сетки
-        gridPane.setHgap(-500); // Горизонтальный промежуток между кнопками
-        gridPane.setVgap(-350); // Вертикальный промежуток между кнопками
+        gridPane.setAlignment(Pos.CENTER);
+        gridPane.setHgap(-500);
+        gridPane.setVgap(-350);
 
-        // Добавление кнопок в сетку 2x2
-        gridPane.add(newGameButton, 0, 0); // Первая строка, первый столбец
-        gridPane.add(rulesButton, 1, 0);   // Первая строка, второй столбец
-        gridPane.add(loadButton, 0, 1);    // Вторая строка, первый столбец
-        gridPane.add(exitButton, 1, 1);    // Вторая строка, второй столбец
+        // Раскладываем кнопки в сетке
+        gridPane.add(newGameButton, 0, 0);
+        gridPane.add(rulesButton,   1, 0);
+        gridPane.add(loadButton,    0, 1);
+        gridPane.add(exitButton,    1, 1);
 
-        // Сдвиг верхнего ряда вправо
-        GridPane.setMargin(newGameButton, new Insets(200, 0, 0, 200)); // Левый отступ для кнопки
-        GridPane.setMargin(rulesButton, new Insets(200, 0, 0, 170));   // Левый отступ для кнопки
-        GridPane.setMargin(loadButton, new Insets(50, 0, 0, 0)); // Левый отступ для кнопки
-        GridPane.setMargin(exitButton, new Insets(50, 0, 0, 0));   // Левый отступ для кнопки
+        // Настраиваем отступы
+        GridPane.setMargin(newGameButton, new Insets(200, 0, 0, 200));
+        GridPane.setMargin(rulesButton,   new Insets(200, 0, 0, 170));
+        GridPane.setMargin(loadButton,    new Insets(50, 0, 0, 0));
+        GridPane.setMargin(exitButton,    new Insets(50, 0, 0, 0));
 
-        // Добавление фона и сетки в корневой элемент
         root.getChildren().addAll(backgroundView, gridPane);
 
         return new Scene(root, 1000, 1000);
@@ -80,7 +85,7 @@ public class MenuManager {
     private void loadSavedGame() {
         GameState loaded = windowManager.loadGameState();
         if (loaded != null) {
-            // Создадим GameFieldManager, который умеет принимать заранее готовый GameState
+            // Создаём GameFieldManager с готовым состоянием
             GameFieldManager manager = new GameFieldManager(windowManager, loaded);
             windowManager.setScene(manager.createGameSceneFromState(loaded));
         }
@@ -95,8 +100,10 @@ public class MenuManager {
         return button;
     }
 
+    /**
+     * Показываем правила игры (смена фона).
+     */
     private void showRules(StackPane root) {
-        // Можно переиспользовать BG1 или BG2 по желанию
         Image background = new Image(Objects.requireNonNull(getClass().getResourceAsStream("/BG2.png")));
         ImageView backgroundView = new ImageView(background);
         backgroundView.setFitWidth(1000);
@@ -108,9 +115,11 @@ public class MenuManager {
         root.setOnMouseClicked(event -> windowManager.initialize(windowManager.stage));
     }
 
+    /**
+     * Переход к сцене настроек новой игры.
+     */
     private void goToNewGameSetup() {
         NewGameSetupManager setupManager = new NewGameSetupManager(windowManager);
-        Scene setupScene = setupManager.createSetupScene();
-        windowManager.setScene(setupScene);
+        windowManager.setScene(setupManager.createSetupScene());
     }
 }

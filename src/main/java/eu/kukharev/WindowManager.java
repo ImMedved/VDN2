@@ -7,10 +7,15 @@ import java.io.File;
 import java.io.PrintWriter;
 import java.util.Scanner;
 
+/**
+ * Главный менеджер окон (переключение сцен, сохранение/загрузка).
+ */
 public class WindowManager {
     public Stage stage;
-    private Scene currentGameScene;
 
+    /**
+     * Инициализация главного окна (стартовое меню).
+     */
     public void initialize(Stage primaryStage) {
         this.stage = primaryStage;
         MenuManager menuManager = new MenuManager(this);
@@ -24,23 +29,24 @@ public class WindowManager {
         stage.show();
     }
 
+    /**
+     * Сохраняет состояние игры в файл savegame.txt.
+     */
     public void saveGameState(GameState state) {
-        // Допустим, файл: "savegame.txt"
         try (PrintWriter writer = new PrintWriter("savegame.txt")) {
             writer.println(state.fieldSize);
             writer.println(state.playerX + ";" + state.playerY);
             writer.println(state.endX + ";" + state.endY);
             writer.println(state.moves);
 
-            // Сохраним уже собранные visitedValues (через запятую, к примеру)
-            // Это числа, которые игрок насобирал
+            // visitedValues (пройденные числа)
             StringBuilder visitedVals = new StringBuilder();
             for (Integer val : state.visitedValues) {
                 visitedVals.append(val).append(",");
             }
             writer.println(visitedVals);
 
-            // Сохраним массив field
+            // Поле
             for (int i = 0; i < state.fieldSize; i++) {
                 for (int j = 0; j < state.fieldSize; j++) {
                     writer.print(state.field[i][j]);
@@ -49,7 +55,7 @@ public class WindowManager {
                 writer.println();
             }
 
-            // Аналогично сохраняем visited
+            // visited (маска посещённых)
             for (int i = 0; i < state.fieldSize; i++) {
                 for (int j = 0; j < state.fieldSize; j++) {
                     writer.print(state.visited[i][j] ? 1 : 0);
@@ -64,6 +70,11 @@ public class WindowManager {
         }
     }
 
+    /**
+     * Загружает состояние игры из файла savegame.txt.
+     *
+     * @return GameState или null, если файл отсутствует или произошла ошибка
+     */
     public GameState loadGameState() {
         File file = new File("savegame.txt");
         if (!file.exists()) {
@@ -120,8 +131,9 @@ public class WindowManager {
         return null;
     }
 
-
-
+    /**
+     * Устанавливает сцену в текущее окно приложения.
+     */
     public void setScene(Scene scene) {
         stage.setScene(scene);
     }
