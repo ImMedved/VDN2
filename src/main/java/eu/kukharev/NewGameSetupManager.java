@@ -29,16 +29,16 @@ public class NewGameSetupManager {
         backgroundView.setFitHeight(1000);
 
         VBox menuBox = new VBox(15);
-        menuBox.setPadding(new Insets(50));
+        menuBox.setPadding(new Insets(500));
         menuBox.setTranslateY(100);
 
-        Text label = new Text("Настройки новой игры:");
-        label.setStyle("-fx-font-size: 24; -fx-fill: white;");
+        Text label = new Text("New Game Settings:");
+        label.setStyle("-fx-font-size: 24; -fx-fill: black;");
 
         // Выбор размера поля
         HBox fieldSizeBox = new HBox(10);
-        Text sizeLabel = new Text("Размер поля:");
-        sizeLabel.setStyle("-fx-font-size: 18; -fx-fill: white;");
+        Text sizeLabel = new Text("Field size:");
+        sizeLabel.setStyle("-fx-font-size: 18; -fx-fill: black;");
 
         ComboBox<Integer> sizeSelector = new ComboBox<>();
         sizeSelector.getItems().addAll(3, 4, 5, 6, 7, 8, 9, 10);
@@ -49,11 +49,11 @@ public class NewGameSetupManager {
 
         // Радиокнопки: ручная / случайная расстановка
         ToggleGroup placementGroup = new ToggleGroup();
-        RadioButton manualButton = new RadioButton("Ручная расстановка (поле задаётся выбором ниже)");
+        RadioButton manualButton = new RadioButton("Manual start/end");
         manualButton.setToggleGroup(placementGroup);
         manualButton.setSelected(true);
 
-        RadioButton randomButton = new RadioButton("Случайная расстановка (поле и старт/конец случайны)");
+        RadioButton randomButton = new RadioButton("Random start/end");
         randomButton.setToggleGroup(placementGroup);
 
         manualButton.setOnAction(e -> {

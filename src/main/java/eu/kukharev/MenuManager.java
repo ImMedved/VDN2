@@ -1,11 +1,17 @@
 package eu.kukharev;
 
+import javafx.application.Platform;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.stage.Window;
 
 import java.util.Objects;
 
@@ -25,25 +31,59 @@ public class MenuManager {
         backgroundView.setFitWidth(1000);
         backgroundView.setFitHeight(1000);
 
-        VBox menuOptions = new VBox(20);
-        menuOptions.setTranslateY(250);
-        menuOptions.setTranslateX(300);
-
+        // Создание кнопок
         Button newGameButton = createImageButton("/SG.png");
-        Button rulesButton  = createImageButton("/RULES.png");
+        Button rulesButton = createImageButton("/RULES.png");
+        Button exitButton = createImageButton("/EXIT.png");
+        Button loadButton = createImageButton("/LOAD.png");
 
-        newGameButton.setScaleX(0.6);
-        newGameButton.setScaleY(0.6);
-        rulesButton.setScaleX(0.6);
-        rulesButton.setScaleY(0.6);
+        // Настройка масштабов кнопок
+        newGameButton.setScaleX(0.5);
+        newGameButton.setScaleY(0.5);
+        rulesButton.setScaleX(0.5);
+        rulesButton.setScaleY(0.5);
+        exitButton.setScaleX(0.25);
+        exitButton.setScaleY(0.25);
+        loadButton.setScaleX(0.25);
+        loadButton.setScaleY(0.25);
 
+        // Добавление обработчиков событий
         newGameButton.setOnAction(event -> goToNewGameSetup());
         rulesButton.setOnAction(event -> showRules(root));
+        exitButton.setOnAction(event -> Platform.exit());
+        loadButton.setOnAction(event -> loadSavedGame());
 
-        menuOptions.getChildren().addAll(newGameButton, rulesButton);
-        root.getChildren().addAll(backgroundView, menuOptions);
+        // Создание GridPane
+        GridPane gridPane = new GridPane();
+        gridPane.setAlignment(Pos.CENTER); // Центрирование всей сетки
+        gridPane.setHgap(-500); // Горизонтальный промежуток между кнопками
+        gridPane.setVgap(-350); // Вертикальный промежуток между кнопками
+
+        // Добавление кнопок в сетку 2x2
+        gridPane.add(newGameButton, 0, 0); // Первая строка, первый столбец
+        gridPane.add(rulesButton, 1, 0);   // Первая строка, второй столбец
+        gridPane.add(loadButton, 0, 1);    // Вторая строка, первый столбец
+        gridPane.add(exitButton, 1, 1);    // Вторая строка, второй столбец
+
+        // Сдвиг верхнего ряда вправо
+        GridPane.setMargin(newGameButton, new Insets(200, 0, 0, 200)); // Левый отступ для кнопки
+        GridPane.setMargin(rulesButton, new Insets(200, 0, 0, 170));   // Левый отступ для кнопки
+        GridPane.setMargin(loadButton, new Insets(50, 0, 0, 0)); // Левый отступ для кнопки
+        GridPane.setMargin(exitButton, new Insets(50, 0, 0, 0));   // Левый отступ для кнопки
+
+        // Добавление фона и сетки в корневой элемент
+        root.getChildren().addAll(backgroundView, gridPane);
 
         return new Scene(root, 1000, 1000);
+    }
+
+    private void loadSavedGame() {
+        GameState loaded = windowManager.loadGameState();
+        if (loaded != null) {
+            // Создадим GameFieldManager, который умеет принимать заранее готовый GameState
+            GameFieldManager manager = new GameFieldManager(windowManager, loaded);
+            windowManager.setScene(manager.createGameSceneFromState(loaded));
+        }
     }
 
     private Button createImageButton(String texturePath) {
